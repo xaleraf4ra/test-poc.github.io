@@ -1,0 +1,21 @@
+<html>
+<body>
+<h1 id="result">Scanning...</h1>
+<script>
+setTimeout(async function() {
+    var r = '';
+    r += 'ethereum: ' + (typeof window.ethereum) + '\n';
+    if (window.ethereum) {
+        try {
+            var accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+            r += 'address: ' + accounts[0] + '\n';
+        } catch(e) {
+            r += 'error: ' + e.message + '\n';
+        }
+    }
+    document.getElementById('result').innerText = r;
+    alert(r);
+}, 3000);
+</script>
+</body>
+</html>
